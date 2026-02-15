@@ -1,0 +1,3 @@
+# Requirements for fmri_preprocessing directory
+python-dotenv>=1.0.0
+nilearn>=0.10.0
