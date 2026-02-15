@@ -44,19 +44,9 @@ What is the "best" model to use to represent the EEG data? I am familiar with ``
 
 What are GSR variants in the fMRI data, and what are the ready-to-use TSVs of parcel-level timeseries? Does this mean that correlation matrices are ready to be built? Is there any additional processing I should complete, i.e. GLM creation, low-pass filtering, confounds filtering, etc.?
 
-With a 200-parcel/density in the Schaefer 2018 atlas, does this mean that there will be 200 ROIs/graph nodes? Explain what those ROIs would look like, and the differences (if any) between parcellations, ROIs, and graph nodes.
-
-Why should we use correlation matrices over partial correlation matrices for FC graphs? What are the differences in representation and computation?
-
-Should we use GSR variant over the non-GSR within the timeseries TSV? What are the tradeoffs and differences? Wouldn't we want to regress out global signal artifacts?
-
-What are common/practical methods used to construct FC graphs? I am most familiar with selecting top-k edges per node that represent the highest ```abs(BOLD activity)``` between two nodes. Are there any other methods of edge selection that we should consider? Should partial correlation matrices be used for graph construction as opposed to correlation matrices? What is Fisher z-transformation used for in correlation matrix construction?
-
-We understand that Schaefer 2018 atlas only includes cortical regions, would it be possible to combine the cortical regions from the Schaefer 2018 atlas with select subcortical regions from FreeSurfer's aparc+aseg parcellations, like the thalamus? Which subcortical regions would be the best additions to the classification project?
-
 How would the knowledge distillation model be constructed? 
 
-In Literature to Consider section, please review the NeuroBOLT repository and code release, and determine if this process would be feasible/useful/necessary for this project, which uses Schaefer + potentially FreeSurfer aparcaseg instead of Difumo atlas. 
+Are the current correlation matrices implemented as an average across the timeseries? How should I save the final k=10 edge-filtered graph to send to my teammates? Would a TSV with zeroed-out edges not in k<=10 be better? Or should I store it as a PyG dataset (i.e. InMemoryDataset)? Can I now create FC graphs per ~60s interval within the timeseries now?
 
 ## Literature to Consider
 Primary inspiration behind the project: [EEG-to-fMRI knowledge distillation empowers few-shot resting-state fMRI vigilance detection](https://spie.org/medical-imaging/presentation/EEG-to-fMRI-knowledge-distillation-empowers-few-shot-resting-state/13925-1) ([GitHub Repository Code Release](https://github.com/neurdylab/FewShotKDVigilance/tree/main))
