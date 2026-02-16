@@ -32,7 +32,7 @@ HRF_DELAY_S = 5.5
 SMOOTH_WINDOW_TR = 5
 
 # Patch-level (training) labels: 5-frame window, sum scores, threshold at -1 (confirmed pipeline)
-PATCH_WINDOW_TR = 5
+PATCH_WINDOW_TR = 28
 PATCH_SUM_THRESHOLD = -1   # sum >= -1 → Alert (1), sum < -1 → Drowsy (0)
 # FewShotKDVigilance repo uses step_size=5, step_seg_length=5 → non-overlapping windows
 PATCH_STRIDE_TR = 5       # 5 = non-overlapping (~57 patches), matches paper; 1 = overlapping (~282)
