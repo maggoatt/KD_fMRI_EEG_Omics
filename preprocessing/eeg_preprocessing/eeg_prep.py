@@ -10,6 +10,7 @@ Pipeline (aligned with FewShotKDVigilance / lead researcher):
 Outputs: per-TR frame-wise scores (-1/0/+1) and per-patch binary labels for GNN training.
 """
 import mne
+from dotenv import load_dotenv
 from mne.time_frequency import psd_array_welch
 import numpy as np
 import pandas as pd
@@ -35,7 +36,7 @@ SMOOTH_WINDOW_TR = 5
 PATCH_WINDOW_TR = 28
 PATCH_SUM_THRESHOLD = -1   # sum >= -1 → Alert (1), sum < -1 → Drowsy (0)
 # FewShotKDVigilance repo uses step_size=5, step_seg_length=5 → non-overlapping windows
-PATCH_STRIDE_TR = 5       # 5 = non-overlapping (~57 patches), matches paper; 1 = overlapping (~282)
+PATCH_STRIDE_TR = 28      # 28 = non-overlapping (~10 patches per subject); 5 = overlapping
 # All posterior (alpha) and frontal (theta) regions from 59-channel layout
 ALPHA_CHANNELS = [
     "O1", "O2", "Oz", "Pz",
@@ -261,7 +262,7 @@ DEFAULT_OUTPUT_DIR = "vigilance_outputs"  # batch results go here when processin
 
 def run_pipeline_on_directory(
     data_root: str,
-    pattern: str = "*task-rest_eeg.set",
+    pattern: str = "**/*task-rest_eeg.set",
     out_dir: str | None = None,
 ) -> list[str]:
     """
@@ -294,6 +295,7 @@ def run_pipeline_on_directory(
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         if Path(arg).is_dir():
