@@ -1,6 +1,6 @@
 # Dataset Preprocessing Guide
 
-**Last updated**: February 16, 2026
+**Last updated**: February 28, 2026
 
 ---
 
@@ -101,7 +101,7 @@ This document covers **EEG and fMRI preprocessing** for the NatView dataset: how
 | **Theta waves (3-7 Hz)** | Slower EEG oscillations associated with drowsiness and early sleep. |
 | **Alpha/Theta ratio** | A simple vigilance metric: high alpha relative to theta = alert; low alpha relative to theta = drowsy. Used to generate ground truth labels for our classification task. |
 | **HRF delay** | Hemodynamic Response Function delay (~5-6 seconds). When neurons fire, the BOLD signal doesn't change instantly — it takes about 5-6 seconds for the blood flow change to peak. This means the fMRI signal at time T actually reflects neural activity from ~5-6 seconds earlier. We account for this when aligning EEG and fMRI data. |
-| **Patch / Epoch** | A short time window extracted from the full scan. In our pipeline, each patch is **28 TRs (58.8 seconds, ~1 minute)** — a non-overlapping window matching the EEG vigilance label granularity. Each patch gets a single binary vigilance label (alert/drowsy) and a corresponding FC graph. |
+| **Patch / Epoch** | A short time window extracted from the full scan. In our pipeline, each patch is **14 TRs (29.4 seconds)** — a non-overlapping window matching the EEG vigilance label granularity. Each patch gets a single binary vigilance label (alert/drowsy) and a corresponding FC graph. |
 
 ---
 
@@ -171,6 +171,21 @@ natview/
 
 **Note on TSV orientation**: The TSV files store data as *parcels × timepoints* (rows are parcels, columns are timepoints). We transpose after loading so that rows = timepoints and columns = parcels, which is the standard orientation for timeseries analysis.
 
+### Project sample_data Layout
+
+| Directory | Contents |
+|-----------|----------|
+| `sample_data/corr_matrices/` | Full-scan 210×210 correlation matrices (`sub-XX_combined_corr.npy`), `roi_labels.npy` |
+| `sample_data/eeg_30s_interval_labels/` | EEG vigilance patches (14 TR = 29.4s): `sub-XX_ses-YY_task-rest_vigilance_patches.tsv` |
+| `sample_data/30s_interval_corr_matrices/` | Interval-level FC: `sub-XX_ses-YY_interval_corr.npy`, `sub-XX_ses-YY_labels.npy` |
+| `sample_data/eeg_10s_interval_labels/` | 10s interval labels (alternative) |
+| `sample_data/eeg_60s_interval_labels/` | 60s interval labels (alternative) |
+| `sample_data/10s_interval_corr_matrices/` | 10s interval FC matrices |
+| `sample_data/60s_interval_corr_matrices/` | 60s interval FC matrices |
+| `sample_data/general_corr_matrices/` | Alternative full-scan matrices |
+
+**Environment**: Set `fMRI_PATH` in `.env` (e.g. `sample_data/30s_interval_corr_matrices`) for the GNN pipeline. See `.env.example`.
+
 ---
 
 ## 4. EEG Preprocessing (eeg_prep.py)
@@ -181,7 +196,7 @@ The EEG preprocessing pipeline (`preprocessing/eeg_preprocessing/eeg_prep.py`) p
 
 - **Frame-wise**: One vigilance score and one ternary label (-1/0/+1 = drowsy/intermediate/alert) per fMRI TR (~286 TRs in a 600 s scan).
 - **HRF alignment**: Labels are shifted by ~2–3 TRs so that the label at fMRI TR *t* reflects the EEG state that *drove* the BOLD signal at that TR.
-- **Patch-wise**: Non-overlapping 28-TR windows (~1 minute) get a single **binary training label** (1 = alert, 0 = drowsy). These patches are what the fMRI pipeline uses for interval-level FC and GNN training.
+- **Patch-wise**: Non-overlapping windows get a single **binary training label** (1 = alert, 0 = drowsy). The **30s interval labels** (14 TRs = 29.4 seconds per patch) are the primary source for interval-level FC and GNN training. The `eeg_prep.py` default uses 28 TRs; 30s labels may be produced with a modified `PATCH_WINDOW_TR` or a separate script.
 
 ### 4.2 Input
 
@@ -233,12 +248,12 @@ The EEG preprocessing pipeline (`preprocessing/eeg_preprocessing/eeg_prep.py`) p
 
 #### Step 6: Patch-wise binary labels (for GNN training)
 
-- **Patch** = non-overlapping window of **28 TRs** (~58.8 s, ~1 minute). `PATCH_WINDOW_TR = 28`, `PATCH_STRIDE_TR = 28`.
+- **Patch** = non-overlapping window. Default in `eeg_prep.py`: `PATCH_WINDOW_TR = 28` (~58.8 s). The **30s interval labels** used by the fMRI pipeline use **14 TRs** (29.4 s) per patch.
 - For each patch:
-  - Take the 28 frame-wise ternary scores (-1, 0, or +1) in that window.
+  - Take the frame-wise ternary scores (-1, 0, or +1) in that window.
   - **Sum** them.
   - **Binary label**: `1 (alert)` if sum ≥ -1, else `0 (drowsy)`. (`PATCH_SUM_THRESHOLD = -1`.)
-- These patch labels are written to `*_vigilance_patches.tsv` and are the labels used by the fMRI pipeline for each 28-TR interval (one label per patch, one FC matrix per patch).
+- These patch labels are written to `*_vigilance_patches.tsv`. The fMRI pipeline reads from `sample_data/eeg_30s_interval_labels/` (14-TR patches).
 
 #### Step 7: Epoch boundaries (reference only)
 
@@ -251,29 +266,30 @@ The EEG preprocessing pipeline (`preprocessing/eeg_preprocessing/eeg_prep.py`) p
 | `TR_S` | 2.1 | fMRI repetition time (seconds). One vigilance value per TR. |
 | `HRF_DELAY_S` | 5.5 | Hemodynamic delay (seconds). Labels shifted by ~2–3 TRs to align with BOLD. |
 | `SMOOTH_WINDOW_TR` | 5 | Moving-average window (TRs) for ratio before ternary thresholding. |
-| `PATCH_WINDOW_TR` | 28 | Patch length in TRs (~1 min). Same as fMRI interval length. |
-| `PATCH_STRIDE_TR` | 28 | Stride between patches (non-overlapping). |
-| `PATCH_SUM_THRESHOLD` | -1 | Patch binary label: sum of 28 frame scores ≥ -1 → alert (1), else drowsy (0). |
+| `PATCH_WINDOW_TR` | 28 (default) | Patch length in TRs. **30s labels** use 14 TRs (29.4 s) — modify or use separate config. |
+| `PATCH_STRIDE_TR` | 28 (default) | Stride between patches (non-overlapping). |
+| `PATCH_SUM_THRESHOLD` | -1 | Patch binary label: sum of frame scores ≥ -1 → alert (1), else drowsy (0). |
 | `ALPHA_HZ` | (8, 12) | Alpha band for posterior channels (Hz). |
 | `THETA_HZ` | (4, 8) | Theta band for frontal channels (Hz). |
 
-### 4.5 Output files (per subject)
+### 4.5 Output files (per subject/session)
 
-All written to a configurable output directory (default: same as input file, or `vigilance_outputs/` when processing a directory).
+All written to a configurable output directory. For the **30s interval labels** used by the fMRI pipeline, outputs are in `sample_data/eeg_30s_interval_labels/`.
 
 | File | Description |
 |------|-------------|
 | `{stem}_vigilance_frames.tsv` | One row per fMRI TR: `fmri_tr_index`, `t_start_s`, `t_end_s`, `vigilance_score`, `label_ternary` (-1/0/1). |
-| `{stem}_vigilance_patches.tsv` | One row per 28-TR patch: `patch_index`, `start_tr`, `end_tr`, `t_start_s`, `t_end_s`, `window_sum`, `label_binary` (1=alert, 0=drowsy). **This file is used by the fMRI pipeline** to define intervals and assign labels. |
+| `{stem}_vigilance_patches.tsv` | One row per patch: `patch_index`, `start_tr`, `end_tr`, `t_start_s`, `t_end_s`, `window_sum`, `label_binary` (1=alert, 0=drowsy). **This file is used by the fMRI pipeline** to define intervals and assign labels. For 30s labels, each patch spans 14 TRs (29.4 s). |
 | `{stem}_vigilance_epochs.tsv` | Epoch boundaries (consecutive same ternary label): `start_tr`, `end_tr`, `start_s`, `end_s`, `label_ternary`. |
 
-Stem is derived from the `.set` filename (e.g. `sub-01_ses-01_task-rest`).
+Stem is derived from the `.set` filename (e.g. `sub-01_ses-01_task-rest`). **Multi-session**: Files follow `sub-XX_ses-YY_task-rest_*`; all sessions are processed.
 
 ### 4.6 How this connects to fMRI preprocessing
 
-- The **fMRI interval/patch pipeline** reads `*_vigilance_patches.tsv` to get `start_tr`, `end_tr`, and `label_binary` for each 28-TR window.
+- The **fMRI interval/patch pipeline** reads `*_vigilance_patches.tsv` from `sample_data/eeg_30s_interval_labels/` (globs `sub-*_ses-*_task-rest_vigilance_patches.tsv` for all sessions).
+- It uses `start_tr`, `end_tr`, and `label_binary` for each patch. **Patch validation**: Only patches fully within the fMRI timeseries are kept; if a patch extends past `n_trs`, processing stops for that subject/session.
 - No extra HRF shift is applied on the fMRI side — the EEG pipeline has already aligned labels to fMRI time.
-- Each 28-TR fMRI patch gets one 210×210 correlation matrix and one binary vigilance label (alert/drowsy), which together form one sample for the GNN student model.
+- Each fMRI patch gets one 210×210 correlation matrix and one binary vigilance label (alert/drowsy), which together form one sample for the GNN student model.
 
 ### 4.7 Running the pipeline
 
@@ -382,33 +398,19 @@ Iterates over all 22 subjects, extracts cortical and subcortical timeseries, com
 
 ### Step 8: Compute Interval-Level Correlation Matrices
 
-Uses the EEG-derived vigilance patch labels to compute a **per-patch FC matrix** for each subject. The EEG team has produced VIGALL-based vigilance labels aligned to fMRI time (HRF delay already applied).
+Uses the EEG-derived vigilance patch labels to compute a **per-patch FC matrix** for each subject/session. The EEG team has produced VIGALL-based vigilance labels aligned to fMRI time (HRF delay already applied).
 
-- **Input**: Combined (288, 210) timeseries + `*_ses-01_task-rest_vigilance_patches.tsv` (from `sample_data/eeg_28TR_interval_labels/`)
-- **Patch definition**: 28-TR non-overlapping windows (58.8 seconds each), with binary labels (1 = alert, 0 = drowsy)
-- **Processing**: For each of the ~10 patches per subject, slice the corresponding 28 TRs from the 210-ROI timeseries, compute a 210 × 210 Pearson correlation matrix
-- **Output directory**: `sample_data/28TR_interval_corr_matrices/`
-- **Per-subject files**:
-  - `sub-XX_interval_corr.npy` — shape **(N_patches, 210, 210)** — all patch correlation matrices
-  - `sub-XX_labels.npy` — shape **(N_patches,)** — binary vigilance labels
+- **Input**: Combined (288, 210) timeseries + `*_ses-*_task-rest_vigilance_patches.tsv` (from `sample_data/eeg_30s_interval_labels/`)
+- **Patch definition**: 14-TR windows (29.4 seconds each) per patch, with binary labels (1 = alert, 0 = drowsy)
+- **Multi-session**: Globs for all sessions per subject (`sub-*_ses-*_task-rest_vigilance_patches.tsv`). fMRI timeseries paths are resolved per subject/session.
+- **Patch validation**: Only patches fully within the timeseries are kept. If `start_tr >= n_trs` or `end_tr > n_trs`, processing stops for that subject/session; no invalid patches are added.
+- **Processing**: For each patch, slice `[start_tr:end_tr]` from the 210-ROI timeseries, compute a 210 × 210 Pearson correlation matrix
+- **Output directory**: `sample_data/30s_interval_corr_matrices/`
+- **Per-subject/session files**:
+  - `sub-XX_ses-YY_interval_corr.npy` — shape **(N_patches, 210, 210)** — all patch correlation matrices
+  - `sub-XX_ses-YY_labels.npy` — shape **(N_patches,)** — binary vigilance labels
 
-**Actual results** (ses-01 only, 22 subjects):
-
-| Subject | Patches | Alert | Drowsy | Subject | Patches | Alert | Drowsy |
-|---------|---------|-------|--------|---------|---------|-------|--------|
-| sub-01 | 10 | 5 | 5 | sub-12 | 10 | 5 | 5 |
-| sub-02 | 11 | 7 | 4 | sub-13 | 10 | 6 | 4 |
-| sub-03 | 11 | 8 | 3 | sub-14 | 10 | 5 | 5 |
-| sub-04 | 11 | 5 | 6 | sub-15 | 11 | 7 | 4 |
-| sub-05 | 11 | 5 | 6 | sub-16 | 10 | 6 | 4 |
-| sub-06 | 10 | 6 | 4 | sub-17 | 10 | 6 | 4 |
-| sub-07 | 16 | 8 | 8 | sub-18 | 10 | 7 | 3 |
-| sub-08 | 11 | 9 | 2 | sub-19 | 11 | 7 | 4 |
-| sub-09 | 10 | 4 | 6 | sub-20 | 11 | 6 | 5 |
-| sub-10 | 11 | 7 | 4 | sub-21 | 10 | 5 | 5 |
-| sub-11 | 10 | 6 | 4 | sub-22 | 10 | 5 | 5 |
-
-**Notes**: Most subjects have 10–11 patches (288 TRs / 28 ≈ 10.3). Sub-07 has 16 due to a longer scan. The alert/drowsy split is approximately 57/43, slightly more balanced than the previous 5-TR version. **Total: 235 labeled FC graphs.**
+**Notes**: ~20 patches per subject per session (288 TRs / 14 ≈ 20.6). Patch count varies by subject/session. **Multi-session** support: subjects with multiple sessions (e.g. ses-01, ses-02) produce separate files per session.
 
 ---
 
@@ -429,7 +431,7 @@ The notebook computes functional connectivity (FC) using **Pearson correlation**
 
 - **Full-scan AND interval-level correlations**: The pipeline produces two types of correlation matrices:
   - **Full-scan** (1 per subject): Summarizes FC across the entire ~10-minute scan (all 288 TRs). Saved in `sample_data/corr_matrices/`.
-  - **Interval-level** (~10 per subject): Each captures FC within a single 28-TR (58.8s) non-overlapping patch, matched to EEG-derived vigilance labels. Saved in `sample_data/28TR_interval_corr_matrices/`.
+  - **Interval-level** (~20 per subject/session): Each captures FC within a single 14-TR (29.4s) patch, matched to EEG-derived vigilance labels. Saved in `sample_data/30s_interval_corr_matrices/` as `sub-XX_ses-YY_interval_corr.npy` and `sub-XX_ses-YY_labels.npy`.
 - **Raw Pearson values**: Correlation values are kept as-is (range [-1, +1]). Per advisor guidance, **Fisher z-transformation is not needed** for resting-state within-subject FC — raw Pearson is appropriate for our pipeline.
 - **No GSR variant**: The non-GSR timeseries (`desc-sm0_bold.tsv` and `func_pp_nofilt_sm0.mni152.3mm.nii.gz`) are used, preserving the global signal.
 - **No edge filtering in the saved matrices**: The saved `.npy` files are dense 210 × 210 matrices — every ROI pair has a correlation value. Edge pruning / top-K selection is only applied at the visualization stage, not stored.
@@ -504,8 +506,9 @@ plotting.plot_connectome(
 #### Completed
 
 - Full-scan (288-TR) correlation matrix extraction and saving for all 22 subjects
-- Interval/epoch segmentation of the timeseries into 28-TR non-overlapping patches
-- Per-interval (28-TR) correlation matrices computed and saved for all 22 subjects
+- Interval/epoch segmentation of the timeseries into 14-TR (29.4s) patches
+- Per-interval correlation matrices computed and saved for all subjects/sessions (multi-session support)
+- Patch validation: only patches fully within the timeseries are saved
 - Vigilance label assignment per interval (binary: alert/drowsy) from EEG-derived VIGALL labels
 - HRF-aligned temporal coupling with EEG patches (HRF delay already applied by EEG preprocessing pipeline)
 - Visualization and saving of all full-scan and interval-level FC heatmaps
@@ -536,40 +539,39 @@ Interval-level graphs are critical because:
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| **Patch duration** | 28 TRs = 58.8 seconds (~1 min) | Provides enough timepoints for a stable correlation estimate (rank 27 for 210 ROIs). Matches ~1-minute vigilance scoring windows. |
-| **TRs per patch** | 28 | Set in `eeg_prep.py` (`PATCH_WINDOW_TR = 28`). |
-| **Patches per subject** | ~10–11 (varies, see table in Section 6 Step 8) | 288 TRs / 28 ≈ 10.3 → 10 complete patches for most subjects. Sub-07 has 16 (longer scan). |
-| **Total labeled patches** | **235** across 22 subjects | Each patch has a binary label: 1 (alert) or 0 (drowsy). |
-| **Overlap** | None | Non-overlapping windows (stride = 28 TRs) — every TR belongs to exactly one patch. |
-| **Label source** | `*_ses-01_task-rest_vigilance_patches.tsv` | From the EEG preprocessing pipeline (`sample_data/eeg_28TR_interval_labels/`). |
+| **Patch duration** | 14 TRs = 29.4 seconds | Provides a stable correlation estimate (rank 14 for 210 ROIs). Matches 30s vigilance scoring windows. |
+| **TRs per patch** | 14 | From `eeg_30s_interval_labels` patches (e.g. `start_tr` 0–14, 14–28, …). |
+| **Patches per subject/session** | ~20 | 288 TRs / 14 ≈ 20.6 → ~20 complete patches per session. |
+| **Total labeled patches** | Varies by sessions | Each patch has a binary label: 1 (alert) or 0 (drowsy). Multi-session: subjects with ses-01, ses-02, etc. produce separate files. |
+| **Overlap** | None | Non-overlapping windows (stride = 14 TRs). |
+| **Label source** | `*_ses-*_task-rest_vigilance_patches.tsv` | From `sample_data/eeg_30s_interval_labels/`. Multi-session glob. |
 
 ### 8.3 Segmentation Strategy (Implemented)
 
 Patch boundaries are defined by the EEG preprocessing pipeline's output (the `start_tr` and `end_tr` columns in each subject's `*_vigilance_patches.tsv` file), not recomputed on the fMRI side. This ensures exact alignment.
 
 ```
-Full timeseries:  TR_0 ... TR_27 | TR_28 ... TR_55 | TR_56 ... TR_83 | ... | TR_252 ... TR_279 | (TR_280-287 remainder)
-                  ←── Patch 0 ──→  ←── Patch 1 ───→  ←── Patch 2 ───→       ←── Patch 9 ────→   (discarded)
-                    label: 1          label: 1           label: 0
+Full timeseries:  TR_0..TR_13 | TR_14..TR_27 | TR_28..TR_41 | ... | TR_266..TR_279 | (remainder)
+                  ← Patch 0 →   ← Patch 1  →   ← Patch 2  →        ← Patch 19 →     (discarded)
+                   14 TRs        14 TRs         14 TRs
 ```
 
-- Each patch slice is a **(28, 210)** sub-matrix of the combined cortical+subcortical timeseries.
-- Remainder TRs at the end (if the total is not divisible by 28) are discarded.
+- Each patch slice is a **(14, 210)** sub-matrix of the combined cortical+subcortical timeseries.
+- **Patch validation**: If any patch extends past `n_trs` (`start_tr >= n_trs` or `end_tr > n_trs`), processing stops for that subject/session; only valid patches are saved.
 
 ### 8.4 Per-Interval Correlation Matrices (Implemented)
 
-For each 28-TR patch, a **210 × 210 Pearson correlation matrix** is computed:
+For each 14-TR patch, a **210 × 210 Pearson correlation matrix** is computed:
 
 ```
 Per patch (e.g., Patch 0):
-    combined_ts[0:28, :]              →  (28, 210) timeseries slice
+    combined_ts[start_tr:end_tr, :]   →  (14, 210) timeseries slice
     np.corrcoef(patch_ts, rowvar=False)  →  (210, 210) correlation matrix for Patch 0
 ```
 
-**Rank note**: A 28 × 210 matrix has rank 27 (at most). While still rank-deficient for 210 variables, this is a **major improvement** over the previous 5-TR approach (rank 4). With 27 degrees of freedom:
-- Correlation estimates are much more stable and meaningful.
-- The matrix is still not invertible (ruling out partial correlation), but the top-K graph construction only needs to rank individual edges, not invert the full matrix.
-- Far fewer spurious ±1 correlations compared to 5-TR patches, resulting in more realistic FC heatmaps.
+**Rank note**: A 14 × 210 matrix has rank 14 (at most). While still rank-deficient for 210 variables:
+- Correlation estimates are more stable than shorter windows (e.g. 5 TRs).
+- The matrix is not invertible (ruling out partial correlation), but the top-K graph construction only needs to rank individual edges, not invert the full matrix.
 
 ### 8.5 Alignment with EEG Patches via HRF Delay
 
@@ -581,28 +583,19 @@ The EEG preprocessing pipeline has **already applied the HRF delay** (~2–3 TRs
 
 ### 8.6 Label Distribution
 
-Across all 22 subjects (ses-01 only):
-
-| Metric | Value |
-|--------|-------|
-| **Total patches** | 235 |
-| **Alert (label=1)** | 135 (57.4%) |
-| **Drowsy (label=0)** | 100 (42.6%) |
-| **Alert:Drowsy ratio** | ~1.35:1 |
-
-The class balance (57/43) is nearly even and unlikely to require explicit balancing, though class weighting remains an option during GNN training if needed.
+Label distribution varies by subject and session. With ~20 patches per session and multiple sessions per subject, total samples scale with the number of sessions. Class balance (alert vs. drowsy) is typically roughly even; class weighting remains an option during GNN training if needed.
 
 ### 8.7 Output Files
 
-All interval-level data is saved to `sample_data/28TR_interval_corr_matrices/`:
+All interval-level data is saved to `sample_data/30s_interval_corr_matrices/`:
 
 | File | Shape | Description |
 |------|-------|-------------|
-| `sub-XX_interval_corr.npy` | (N_patches, 210, 210) | Stacked Pearson correlation matrices for all patches (N_patches ≈ 10) |
-| `sub-XX_labels.npy` | (N_patches,) | Binary vigilance labels (1=alert, 0=drowsy) |
-| `images/sub-XX_patchNN_alert.png` | — | Saved FC heatmap for each patch (for visual inspection) |
+| `sub-XX_ses-YY_interval_corr.npy` | (N_patches, 210, 210) | Stacked Pearson correlation matrices for all patches (N_patches ≈ 20) |
+| `sub-XX_ses-YY_labels.npy` | (N_patches,) | Binary vigilance labels (1=alert, 0=drowsy) |
+| `images/sub-XX_ses-YY_patchNN_alert.png` | — | Saved FC heatmap for each patch (for visual inspection) |
 
-**Note**: The full-scan matrices remain available in `sample_data/corr_matrices/` as a reference baseline. Previous 5-TR interval matrices are archived in `sample_data/5TR_interval_corr_matrices/`.
+**Note**: The full-scan matrices remain available in `sample_data/corr_matrices/` as a reference baseline. Other interval lengths (10s, 60s) are in `10s_interval_corr_matrices/` and `60s_interval_corr_matrices/`.
 
 ---
 
@@ -651,7 +644,7 @@ Per advisor guidance: for resting-state, within-subject functional connectivity 
 
 | Visualization | Status | Description |
 |---------------|--------|-------------|
-| **Per-patch FC heatmaps** | **DONE** | 210 × 210 correlation matrix heatmap for each 28-TR patch, saved as PNG. Located in `sample_data/28TR_interval_corr_matrices/images/`. |
+| **Per-patch FC heatmaps** | **DONE** | 210 × 210 correlation matrix heatmap for each patch, saved as PNG. Located in `sample_data/30s_interval_corr_matrices/images/`. |
 | **Full-scan FC heatmaps** | **DONE** | Per-subject full-scan heatmaps saved in `sample_data/corr_matrices/images/`. |
 | **Full-scan connectomes** | **DONE** | Glass-brain connectome plots for demonstration subjects. |
 | **Per-patch connectomes** | Planned | Glass-brain plots per patch with top-K filtering. |
@@ -664,14 +657,15 @@ Per advisor guidance: for resting-state, within-subject functional connectivity 
 | Aspect | Status | Details |
 |--------|--------|---------|
 | **Full-scan FC extraction** | **DONE** | 22 subjects × 1 matrix each → `sample_data/corr_matrices/` |
-| **Interval-level FC extraction** | **DONE** | 235 total labeled patches (28-TR) → `sample_data/28TR_interval_corr_matrices/` |
-| **EEG vigilance labels** | **DONE** | Binary (alert/drowsy), HRF delay pre-applied by EEG pipeline |
+| **Interval-level FC extraction** | **DONE** | 14-TR (29.4s) patches, multi-session → `sample_data/30s_interval_corr_matrices/` |
+| **EEG vigilance labels** | **DONE** | Binary (alert/drowsy), HRF delay pre-applied; `eeg_30s_interval_labels/` |
+| **Patch validation** | **DONE** | Only patches fully within timeseries saved |
 | **Visualization (heatmaps)** | **DONE** | Full-scan + interval-level heatmaps saved as PNG |
 | **Fisher z-transformation** | **Skipped** | Not needed for resting-state within-subject FC (per advisor) |
-| **Top-K edge selection** | Remaining | K=10 edges per node from raw Pearson matrices |
-| **PyG graph construction** | Remaining | Convert sparse matrices + labels into PyG `Data` objects |
-| **PyG InMemoryDataset packaging** | Remaining | Bundle all 235 graphs for GNN training |
-| **Node feature definition** | Remaining | Decide what goes into `x` (node features) beyond connectivity |
+| **Top-K edge selection** | **DONE** (in dataset) | `BrainDataset` applies K=10 in `_corr_to_graph` |
+| **PyG graph construction** | **DONE** | `BrainDataset` returns PyG `Data` objects |
+| **PyG InMemoryDataset packaging** | Optional | `BrainDataset` works with PyG `DataLoader` directly |
+| **GNN benchmark** | **DONE** | `model/gnn_pipeline.ipynb` uses `BrainDataset` with cGCN/EdgeConv |
 
 ---
 
@@ -693,10 +687,10 @@ A quick reference for the key data structures in the notebook:
 
 | Variable | Shape | Description |
 |----------|-------|-------------|
-| `patch_ts` | (28, 210) | Timeseries slice for one 28-TR patch (58.8 seconds) |
-| `patch_corr` | (210, 210) | Pearson correlation matrix for one patch (rank ≤ 27) |
-| `sub-XX_interval_corr.npy` | (N_patches, 210, 210) | All patch correlation matrices for one subject (N_patches ≈ 10) |
-| `sub-XX_labels.npy` | (N_patches,) | Binary vigilance labels for one subject (1=alert, 0=drowsy) |
+| `patch_ts` | (14, 210) | Timeseries slice for one 14-TR patch (29.4 seconds) |
+| `patch_corr` | (210, 210) | Pearson correlation matrix for one patch (rank ≤ 14) |
+| `sub-XX_ses-YY_interval_corr.npy` | (N_patches, 210, 210) | All patch correlation matrices for one subject/session (N_patches ≈ 20) |
+| `sub-XX_ses-YY_labels.npy` | (N_patches,) | Binary vigilance labels for one subject/session (1=alert, 0=drowsy) |
 
 ### Planned Graph Shapes (Next Phase)
 
@@ -712,45 +706,58 @@ A quick reference for the key data structures in the notebook:
 
 ## 11. How This Feeds Into the Model
 
-The preprocessing pipeline produces **~10 labeled FC matrices per subject** (235 total across 22 subjects), each paired with a binary vigilance label. After the remaining graph construction steps, these become the input to the GNN student model.
+The preprocessing pipeline produces **~20 labeled FC matrices per subject per session** (14–TR / 29.4s patches), each paired with a binary vigilance label. Multi-session support: subjects with multiple sessions (ses-01, ses-02, etc.) produce separate files. The `BrainDataset` class loads these and converts them to PyG `Data` objects for the GNN student model.
 
 ### Completed Pipeline
 
 ```
-fMRI scan (10 min, per subject)
+fMRI scan (10 min, per subject/session)
     → Load 200 cortical ROI timeseries (Schaefer 2018 pre-extracted TSV)
     → Extract 10 subcortical ROI timeseries (Harvard-Oxford via NiftiLabelsMasker)
     → Combine into (288, 210) timeseries
     → Compute full-scan 210 × 210 Pearson correlation matrix → save as .npy     ✓
-    → Load EEG-derived vigilance patch labels (28-TR, non-overlapping, HRF pre-applied)
-    → Per 28-TR patch:
-        → Slice (28, 210) timeseries segment
-        → Compute 210 × 210 Pearson correlation matrix (rank ≤ 27)
+    → Glob EEG-derived vigilance patch labels (sub-*_ses-*_task-rest_vigilance_patches.tsv)
+    → Per patch (14 TRs = 29.4s):
+        → Slice [start_tr:end_tr] from (288, 210) timeseries → (14, 210)
+        → Validate patch fully within timeseries; stop if out-of-bounds
+        → Compute 210 × 210 Pearson correlation matrix (rank ≤ 14)
         → Pair with binary vigilance label (1=alert, 0=drowsy)
-    → Save per-subject: interval_corr.npy + labels.npy                          ✓
+    → Save per-subject/session: sub-XX_ses-YY_interval_corr.npy + labels.npy      ✓
     → Visualize and save all FC heatmaps                                         ✓
 ```
 
-### Remaining Pipeline (Graph Construction Phase)
+### Graph Construction (Implemented in BrainDataset)
 
 ```
-Per patch (starting from saved interval_corr.npy):
-    → Select top-K=10 edges per node (by absolute Pearson correlation)
-    → Build sparse PyG Data graph (210 nodes, ≤2,100 edges, binary label)
-→ Package all 235 graphs as PyG InMemoryDataset
-→ Train GNN student via knowledge distillation from EEG teacher
+Per patch (from saved sub-XX_ses-YY_interval_corr.npy):
+    → BrainDataset: select top-K=10 edges per node (by absolute Pearson correlation)
+    → Build PyG Data graph (210 nodes, ≤2,100 edges, binary label)
+→ PyG DataLoader batches graphs for training
+→ GNN pipeline (gnn_pipeline.ipynb): cGCN/EdgeConv model for benchmark
+→ Remaining: knowledge distillation from EEG teacher
 ```
 
 ### Dataset Summary
 
 | Metric | Value |
 |--------|-------|
-| **Subjects** | 22 (ses-01 only) |
-| **Total labeled FC graphs** | 235 |
-| **Alert graphs** | 135 (57.4%) |
-| **Drowsy graphs** | 100 (42.6%) |
+| **Subjects** | 22 (multi-session supported) |
+| **Sessions** | ses-01, ses-02, etc. (globs for all available) |
 | **Graph nodes** | 210 (200 cortical + 10 subcortical) |
 | **Planned edges per graph** | ≤ 2,100 (top-K=10 per node) |
-| **Patch duration** | 28 TRs = 58.8 seconds (~1 min) |
-| **Correlation matrix rank** | Up to 27 (vs. rank 4 with 5-TR patches) |
+| **Patch duration** | 14 TRs = 29.4 seconds |
+| **Patches per session** | ~20 |
+| **Correlation matrix rank** | Up to 14 |
 | **Label type** | Binary (1=alert, 0=drowsy) |
+| **Data loading** | `BrainDataset` / `BrainOmicsDataset` in `preprocessing/omics_preprocessing/create_omics_dataset.py`; expects `sub-*_ses-*_interval_corr.npy` and `sub-*_ses-*_labels.npy` |
+
+### Data Loading: BrainDataset and BrainOmicsDataset
+
+The `create_omics_dataset.py` module provides two PyG-compatible dataset classes:
+
+| Class | Use | Input | Output |
+|-------|-----|-------|--------|
+| **BrainDataset** | Benchmark GNN (fMRI-only) | `fmri_path`, `k` (top-K edges) | PyG `Data` with `x`, `edge_index`, `edge_attr`, `y`; metadata `subject`, `session`, `interval` |
+| **BrainOmicsDataset** | Omics-aware model | `fmri_path`, `expression_path`, `k` | `(graph, node_activity, expression, label)` |
+
+Both glob for `sub-*_ses-*_interval_corr.npy` and `sub-*_ses-*_labels.npy`, supporting multi-session data. The GNN pipeline (`model/gnn_pipeline.ipynb`) uses `BrainDataset` with `fMRI_PATH` from `.env`.

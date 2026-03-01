@@ -56,4 +56,9 @@ Ground truth method: [Multimodal state-dependent connectivity analysis of arousa
 Potential/intriguing inference model: [NeuroBOLT: Resting-state EEG-to-fMRI Synthesis with Multi-dimensional Feature Mapping](https://arxiv.org/abs/2410.05341) ([GitHub Repository Code Release](https://github.com/soupeeli/NeuroBOLT))
 
 ## Metadata
-Last updated by Maggie on 2/15/2026.
+Last updated by Maggie on 2/28/2026.
+
+### Recent updates (Feb 28, 2026)
+- **Patch size**: 15 TRs (29.4 seconds) per patch for interval-level FC matrices.
+- **Multi-session support**: Interval-level FC extraction now processes all sessions per subject via glob (`sub-*_ses-*_task-rest_vigilance_patches.tsv`). Output files include session ID: `sub-XX_ses-YY_interval_corr.npy`, `sub-XX_ses-YY_labels.npy`.
+- **Patch validation**: Only patches fully within the fMRI timeseries are saved. If a patch extends past the total TRs, processing stops for that subject/session; no invalid patches are added. This avoids blank/NaN correlation matrices from out-of-bounds slices.
