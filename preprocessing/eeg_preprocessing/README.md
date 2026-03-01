@@ -76,17 +76,17 @@ One set of three TSV files per subject/session (e.g. `sub-01_ses-01_task-rest_*`
 
 ### **Patches** (`*_vigilance_patches.tsv`)
 
-**One row per 28-TR non-overlapping window.** Binary labels for training (e.g. GNN).
+**One row per 14-TR non-overlapping window.** Binary labels for training (e.g. GNN).
 
 | Column | Meaning |
 |--------|--------|
 | `patch_index` | Window index |
-| `start_tr`, `end_tr` | TR range [start_tr, end_tr) — 28 consecutive TRs |
-| `t_start_s`, `t_end_s` | Same window in seconds (each window ≈ 58.8 s) |
-| `window_sum` | Sum of the 28 frame-wise `label_ternary` values (-28 to +28) |
+| `start_tr`, `end_tr` | TR range [start_tr, end_tr) — 14 consecutive TRs |
+| `t_start_s`, `t_end_s` | Same window in seconds (each window ≈ 30 sec.) |
+| `window_sum` | Sum of the 14 frame-wise `label_ternary` values (-14 to +14) |
 | `label_binary` | **1** alert, **0** drowsy. Rule: `window_sum >= -1` → 1, else 0 |
 
-**Use for**: Training/evaluation. Each row = one labeled sample (e.g. one FC graph from that 28-TR window). **This file is used by the fMRI preprocessing pipeline** to define intervals and assign labels.
+**Use for**: Training/evaluation. Each row = one labeled sample (e.g. one FC graph from that 14-TR window). **This file is used by the fMRI preprocessing pipeline** to define intervals and assign labels.
 
 ---
 

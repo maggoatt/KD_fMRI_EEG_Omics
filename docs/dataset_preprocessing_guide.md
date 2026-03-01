@@ -741,15 +741,14 @@ Per patch (from saved sub-XX_ses-YY_interval_corr.npy):
 
 | Metric | Value |
 |--------|-------|
-| **Subjects** | 22 (multi-session supported) |
-| **Sessions** | ses-01, ses-02, etc. (globs for all available) |
+| **Subjects** | 22 |
+| **Sessions** | ses-01, ses-02, etc. |
 | **Graph nodes** | 210 (200 cortical + 10 subcortical) |
 | **Planned edges per graph** | ≤ 2,100 (top-K=10 per node) |
-| **Patch duration** | 14 TRs = 29.4 seconds |
-| **Patches per session** | ~20 |
-| **Correlation matrix rank** | Up to 14 |
+| **Interval duration** | 14 TRs = 29.4 seconds |
+| **Total intervals** | 753 |
+| **Intervals per session** | ~20 |
 | **Label type** | Binary (1=alert, 0=drowsy) |
-| **Data loading** | `BrainDataset` / `BrainOmicsDataset` in `preprocessing/omics_preprocessing/create_omics_dataset.py`; expects `sub-*_ses-*_interval_corr.npy` and `sub-*_ses-*_labels.npy` |
 
 ### Data Loading: BrainDataset and BrainOmicsDataset
 
