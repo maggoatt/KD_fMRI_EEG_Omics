@@ -13,16 +13,18 @@ class BrainOmicsDataset(Dataset):
         self.k = k
         self.expression_data = torch.FloatTensor(np.load(expression_path))
         
-        corr_files = sorted(glob.glob(f"{fmri_path}/sub-*_interval_corr.npy"))
+        corr_files = sorted(glob.glob(f"{fmri_path}/sub-*_ses-*_interval_corr.npy"))
 
         for corr_file in corr_files:
             filename = os.path.basename(corr_file)
-            subject_id = filename.split('_')[0]  # 'sub-01'
+            parts = filename.split('_')
+            subject_id = parts[0]  # 'sub-01'
+            ses_id = parts[1]      # 'ses-01'
             corr_intervals = np.load(corr_file)
             
-            label_file = os.path.join(fmri_path, f"{subject_id}_labels.npy")
+            label_file = os.path.join(fmri_path, f"{subject_id}_{ses_id}_labels.npy")
             if not os.path.exists(label_file):
-                print(f"Warning: Labels not found for {subject_id}, skipping.")
+                print(f"Warning: Labels not found for {subject_id}/{ses_id}, skipping.")
                 continue
             labels = np.load(label_file)
 
@@ -30,6 +32,7 @@ class BrainOmicsDataset(Dataset):
             for i in range(len(corr_intervals)):
                 self.samples.append({
                     'subject': subject_id,
+                    'session': ses_id,
                     'interval': i,
                     'corr_matrix': corr_intervals[i],
                     'label': labels[i]
@@ -76,22 +79,25 @@ class BrainDataset(Dataset):
         super().__init__()
         self.k = k
         self.samples = []
-        corr_files = sorted(glob.glob(f"{fmri_path}/sub-*_interval_corr.npy"))
+        corr_files = sorted(glob.glob(f"{fmri_path}/sub-*_ses-*_interval_corr.npy"))
 
         for corr_file in corr_files:
             filename = os.path.basename(corr_file)
-            subject_id = filename.split('_')[0]  # 'sub-01'
+            parts = filename.split('_')
+            subject_id = parts[0]  # 'sub-01'
+            ses_id = parts[1]      # 'ses-01'
             corr_intervals = np.load(corr_file)
 
-            label_file = os.path.join(fmri_path, f"{subject_id}_labels.npy")
+            label_file = os.path.join(fmri_path, f"{subject_id}_{ses_id}_labels.npy")
             if not os.path.exists(label_file):
-                print(f"Warning: Labels not found for {subject_id}, skipping.")
+                print(f"Warning: Labels not found for {subject_id}/{ses_id}, skipping.")
                 continue
             labels = np.load(label_file)
 
             for i, _ in enumerate(corr_intervals):
                 self.samples.append({
                     'subject': subject_id,
+                    'session': ses_id,
                     'interval': i,
                     'corr_matrix': corr_intervals[i],
                     'label': labels[i]
@@ -113,6 +119,7 @@ class BrainDataset(Dataset):
 
         data_object = Data(x=x, edge_index=edge_index, edge_attr=edge_weights, y=y)  # Data object
         data_object.subject = sample['subject']  # adding on some metadata for analysis
+        data_object.session = sample['session']
         data_object.interval = sample['interval']
 
         return data_object
