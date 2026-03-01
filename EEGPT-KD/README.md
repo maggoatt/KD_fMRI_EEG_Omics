@@ -8,7 +8,7 @@ multimodal vigilance classification project.
 
 ## Why Knowledge Distillation?
 
-The goal: classify vigilance states (alert / intermediate / drowsy) from fMRI brain graphs
+The goal: classify vigilance states (alert / drowsy) from fMRI brain graphs
 alone, without needing EEG at recording time.
 
 - EEG can classify vigilance well but requires wearing an electrode cap
@@ -17,7 +17,7 @@ alone, without needing EEG at recording time.
 
 KD transfers "soft knowledge" from the EEG teacher to the fMRI student. Instead of just
 hard labels (e.g., "drowsy"), the teacher provides probability distributions
-(e.g., [0.05, 0.25, 0.70]) that encode inter-class relationships. The student learns
+(e.g., [0.15, 0.85]) that encode inter-class relationships. The student learns
 from these richer signals.
 
 Our additional novelty: the fMRI brain graph uses gene expression data from the Allen Human
@@ -35,7 +35,7 @@ EEG signals (30s windows)
 [Adaptive Spatial Filter + Linear Head] <-- only these are trained (~2K params)
     |
     v
-Soft labels (3-class probability distribution)
+Soft labels (2-class probability distribution)
     |
     v  (KD loss: KL-divergence + optional feature MSE)
     |
@@ -71,7 +71,7 @@ A Graph Neural Network (GCN or GAT) operating on brain connectivity graphs.
 - Nodes: ~210 ROIs (Schaefer 200 cortical + 10 subcortical from FreeSurfer)
 - Edges: top k=10 per node by absolute fMRI correlation
 - Node features: fMRI connectivity profile (210-dim) concatenated with gene expression (294-dim)
-- Output: 3-class (alert, intermediate, drowsy)
+- Output: 2-class (alert, drowsy)
 
 ## KD Loss Function
 
@@ -106,7 +106,7 @@ Leave-One-Subject-Out (LOSO) cross-validation:
 - 22 folds, each trains on 21 subjects (~760 samples), tests on 1 (~40 samples)
 - No data leakage (subject-level splits)
 - This is the standard evaluation method in EEG/neuroimaging research
-- Metrics: balanced accuracy, weighted F1, Cohen's kappa
+- Metrics: balanced accuracy, AUROC, F1
 
 ## Experiments to Run
 
@@ -124,9 +124,9 @@ Leave-One-Subject-Out (LOSO) cross-validation:
 - [ ] 1.2 Download the pretrained checkpoint (eegpt_mcae_58chs_4s_large4E.ckpt)
 - [ ] 1.3 Write adapter to load EEGPT encoder in inference mode (frozen weights)
 - [ ] 1.4 Implement adaptive spatial filter to map NatView EEG channels to EEGPT's 58-channel space
-- [ ] 1.5 Implement linear classification head (512 -> 3)
+- [ ] 1.5 Implement linear classification head (512 -> 2)
 - [ ] 1.6 Train linear probe on EEG data using LOSO, verify teacher accuracy
-      - Target: 65%+ balanced accuracy on 3-class vigilance (comparable to Sleep-EDFx results)
+      - Target: 75%+ balanced accuracy on 2-class vigilance
 
 ### Phase 2: Student GNN
 
@@ -146,7 +146,7 @@ Leave-One-Subject-Out (LOSO) cross-validation:
 ### Phase 4: Evaluation and Ablations
 
 - [ ] 4.1 Run all LOSO folds for each experiment variant
-- [ ] 4.2 Compute metrics: balanced accuracy, weighted F1, Cohen's kappa
+- [ ] 4.2 Compute metrics: balanced accuracy, AUROC, F1
 - [ ] 4.3 Compare: baseline vs KD vs genomics vs KD+genomics
 - [ ] 4.4 Generate results tables and confusion matrices
 
