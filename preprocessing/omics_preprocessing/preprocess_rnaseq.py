@@ -86,11 +86,16 @@ def create_expression_mapping(datadir='../sample_data', atlas_path=None):
     #expression_filtered.to_csv(f'{datadir}/sleep_related_gene_expression.csv')
 
     # save as dataloader
-    np.save(f'{datadir}/gene_expression_schaefer210.npy', expression_filtered.values)
+    #np.save(f'{datadir}/gene_expression_schaefer210.npy', expression_filtered.values)
     return expression_filtered
 
 
 if __name__ == "__main__":
     #create_combined_atlas("/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data")
-    expression_filtered = create_expression_mapping(datadir="/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data", atlas_path="/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data/combined_atlas.nii.gz")
+    datadir = "/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data"
+    expression_filtered = create_expression_mapping(datadir=datadir, atlas_path=f'{datadir}/combined_atlas.nii.gz')
+    np.save(f'{datadir}/gene_expression_schaefer210.npy', expression_filtered.values)
     
+    # ALSO save gene names! (NEW)
+    gene_names = expression_filtered.columns.tolist()
+    np.save(f'{datadir}/gene_names.npy', gene_names)
