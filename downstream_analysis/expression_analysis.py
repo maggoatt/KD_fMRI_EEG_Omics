@@ -18,7 +18,7 @@ class SleepROIDiscovery:
         """
         self.dataset = dataset
         self.expression_data = expression_data.numpy() if torch.is_tensor(expression_data) else expression_data
-        self.n_rois = 210
+        self.n_rois = 200
         
         if gene_names_path:
             try:
