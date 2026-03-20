@@ -18,8 +18,9 @@ class ROIConnectivityDataset(Dataset):
     """
     def __init__(self, brain_dataset, expression_data):
         self.samples = []
-        
-        
+
+        n_rois = min(expression_data.shape[0], 210) 
+
         for sample_idx, sample in enumerate(brain_dataset.samples):
             corr_matrix = sample['corr_matrix']
             state = sample['label']  # 0=awake, 1=drowsy
@@ -33,7 +34,7 @@ class ROIConnectivityDataset(Dataset):
             fisher_z = np.arctanh(corr_clip)
             
             # Create one training sample per ROI
-            for roi in range(210):
+            for roi in range(n_rois):
                 # Input: Gene expression for this ROI
                 gene_expr = expression_data[roi, :]
                 

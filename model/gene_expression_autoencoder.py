@@ -8,6 +8,8 @@ import seaborn as sns
 from dataset.create_omics_dataset import BrainOmicsDataset
 from dataset.ROI_connectivity_dataset import ROIConnectivityDataset
 from downstream_analysis.expression_analysis import SleepROIDiscovery
+from preprocessing.omics_preprocessing.preprocess_rnaseq import create_expression_mapping
+
 
 class GeneExpressionAutoencoder(nn.Module):
     def __init__(self, n_genes=300, latent_dim=32):
@@ -63,6 +65,9 @@ def train(model, train_loader, test_loader, epochs=100, batch_size=64, lr=1e-3):
     best_test_loss = float('inf')
     patience_counter = 0
 
+
+    train_losses = []
+    test_losses = []
     for epoch in range(epochs):
         # Train
         model.train()
@@ -86,6 +91,7 @@ def train(model, train_loader, test_loader, epochs=100, batch_size=64, lr=1e-3):
             train_loss += loss.item()
         
         train_loss /= len(train_loader)
+        train_losses.append(train_loss)
         # Test
         model.eval()
         test_loss = 0
@@ -102,14 +108,14 @@ def train(model, train_loader, test_loader, epochs=100, batch_size=64, lr=1e-3):
                 test_loss += loss.item()
         
         test_loss /= len(test_loader)
-        
+        test_losses.append(test_loss)
         # Scheduler
         scheduler.step(test_loss)
         
         # Save best
         if test_loss < best_test_loss:
             best_test_loss = test_loss
-            #torch.save(model.state_dict(), 'gene_to_connectivity_autoencoder.pt')
+            torch.save(model.state_dict(), 'gene_to_connectivity_autoencoder.pt')
             patience_counter = 0
         else:
             patience_counter += 1
@@ -131,7 +137,7 @@ def train(model, train_loader, test_loader, epochs=100, batch_size=64, lr=1e-3):
     
     # Load best model
     model.load_state_dict(torch.load('gene_to_connectivity_autoencoder.pt'))
-    
+    plot_training_loss(train_losses, test_losses)
     return model
 
 
@@ -187,17 +193,55 @@ def state_differences(reconstructions, critical_rois):
     
     return diff
 
+
+def plot_training_loss(train_losses, test_losses):
+    """
+    Plot training and test loss curves
+    """
+    plt.figure(figsize=(10, 6))
+    
+    epochs = range(1, len(train_losses) + 1)
+    
+    plt.plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
+    plt.plot(epochs, test_losses, 'r-', label='Test Loss', linewidth=2)
+    
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Loss (MSE)', fontsize=12)
+    plt.title('Training and Test Loss Over Time', fontsize=14, fontweight='bold')
+    plt.legend(fontsize=11)
+    plt.grid(True, alpha=0.3)
+    
+    # Mark best epoch
+    best_epoch = np.argmin(test_losses)
+    best_loss = test_losses[best_epoch]
+    plt.scatter([best_epoch + 1], [best_loss], color='red', s=100, 
+                zorder=5, label=f'Best: {best_loss:.4f}')
+    plt.axvline(x=best_epoch + 1, color='red', linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('training_loss_curve.png', dpi=300, bbox_inches='tight')
+    print("\n✓ Saved training loss curve to: training_loss_curve.png")
+    plt.show()
+
 if __name__ == "__main__":
-    savepath = '/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/results/'
+    savepath = '/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data/results/'
+    expression_filtered = create_expression_mapping(
+        datadir='/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data',
+        atlas_path='/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data/combined_atlas.nii.gz'  # 210 ROIs
+    )
+
     dataset = BrainOmicsDataset(
         fmri_path='/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data/60s_interval_corr_matrices/',
         expression_path='/Users/gautham/deep_learning/multimodal_brain_proj/KD_fMRI_EEG_Omics/sample_data/gene_expression_schaefer210.npy',
         k=10,
-        use_expression=True
     )
     batch_size = 64
     expression_data = dataset.expression_data
+
+    
+    print(expression_data.shape)
     roi_dataset = ROIConnectivityDataset(dataset, expression_data)
+    
 
     sample_indices = list(set([s['sample_idx'] for s in roi_dataset.samples]))
     np.random.shuffle(sample_indices)
